@@ -1,6 +1,6 @@
-var mocroKernelModule = angular.module('uiMicrokernel', []);
+var microKernelModule = angular.module('uiMicrokernel', []);
 
-mocroKernelModule.factory('$objectstore', function($http) {
+microKernelModule.factory('$objectstore', function($http, $v6urls) {
   
 	function Requestor(_namespace,_class,_token){
 
@@ -21,7 +21,7 @@ mocroKernelModule.factory('$objectstore', function($http) {
 				mainObject = {Parameters : parameters, Object : data};
 
 
-			$http.post('http://localhost:3000/com.duosoftware.customer/account',mainObject, {headers:{"securityToken" : "123"}}).
+			$http.post($v6urls.objectStore + '/' + namespace + '/' + cls,mainObject, {headers:{"securityToken" : "123"}}).
 			  success(function(data, status, headers, config) {
 			  	if (onComplete)
 			  		onComplete(data);				  	
@@ -41,7 +41,7 @@ mocroKernelModule.factory('$objectstore', function($http) {
 
 		return {
 			getByKeyword: function(keyword,parameters){
-				$http.get('http://localhost:3000/com.duosoftware.customer/account?keyword=' + keyword,{headers:{"securityToken" : "123"}}).
+				$http.get($v6urls.objectStore + '/' + namespace + '/' + cls + '?keyword=' + keyword,{headers:{"securityToken" : "123"}}).
 				  success(function(data, status, headers, config) {
 				  	if (onGetMany)
 				  		onGetMany(data);				  	
@@ -55,7 +55,7 @@ mocroKernelModule.factory('$objectstore', function($http) {
 				  });
 			},
 			getByKey: function(key){
-				$http.get('http://localhost:3000/com.duosoftware.customer/account/' + key,{headers:{"securityToken" : "123"}}).
+				$http.get($v6urls.objectStore + '/' + namespace + '/' + cls + '/' + key,{headers:{"securityToken" : "123"}}).
 				  success(function(data, status, headers, config) {
 				  	if (onGetOne)
 				  		onGetOne(data);				  	
@@ -73,7 +73,7 @@ mocroKernelModule.factory('$objectstore', function($http) {
 			},
 			getByFiltering: function(filter,parameters){
 				//,"Content-Type":"application/json"
-				$http.post('http://localhost:3000/com.duosoftware.customer/account',{"Query" : {"Type" : "", "Parameters": filter}}, {headers:{"securityToken" : "123"}}).
+				$http.post($v6urls.objectStore + '/' + namespace + '/' + cls ,{"Query" : {"Type" : "", "Parameters": filter}}, {headers:{"securityToken" : "123"}}).
 				  success(function(data, status, headers, config) {
 				  	if (onGetMany)
 				  		onGetMany(data);				  	
@@ -112,22 +112,53 @@ mocroKernelModule.factory('$objectstore', function($http) {
 });
 
 
-mocroKernelModule.factory('$auth', function($http) {
+microKernelModule.factory('$auth', function($http, $v6urls) {
  
+ 	var sessionInfo;
+ 	var securityToken;
+	var onLoggedInResultEvent;
+
+	function login(username, password,domain){
+		var loginResult = {isSuccess:true, message:"Success", securityToken:"", details:{}};
+
+		$http.get($v6urls.auth + "/Login/" + username +"/" + password + "/" + domain).
+		  success(function(data, status, headers, config) {
+		  	loginResult.details = data;
+		  	loginResult.securityToken = data.SecurityToken;
+		  	
+		  	sessionInfo = data;
+		  	securityToken = data.SecurityToken;
+
+		  	if (onLoggedInResultEvent)
+		  		onLoggedInResultEvent(loginResult);				  	
+		  }).
+		  error(function(data, status, headers, config) {
+		  	loginResult.isSuccess = false;
+		  	loginResult.message = data;
+		  	if (onLoggedInResultEvent)
+				onLoggedInResultEvent(loginResult);
+		  });
+
+		
+	}
+
 	return {
-  		login: function(username,password){
-  			var req = new Requestor(namespace,cls,token);
-  			return req;
+  		login: function(username,password, domain){
+  			login(username, password, domain)
   		},
   		logout: function(securityToken){
   			var req = new Requestor(namespace,cls,token);
   			return req;
   		},
+  		onLoginResult: function(func){
+  			onLoggedInResultEvent = func;
+  		}
+
   	}
 });
 
-mocroKernelModule.factory('$fws', function($rootScope) {
-    var socket = io.connect('http://localhost:4000/');
+microKernelModule.factory('$fws', function($rootScope, $v6urls) {
+    var socket = io.connect($v6urls.fws + "/");
     return {
         on: function(eventName, callback) {
             socket.on(eventName, function() {
@@ -148,4 +179,54 @@ mocroKernelModule.factory('$fws', function($rootScope) {
             });
         }
     };
+});
+
+microKernelModule.factory('$backdoor', function() {
+   
+   	var logLines = [];
+	var onItemAdded;
+
+	function timeStamp() {
+		var now = new Date();
+		var date = [ now.getMonth() + 1, now.getDate(), now.getFullYear() ];
+		var time = [ now.getHours(), now.getMinutes(), now.getSeconds() ];
+		 
+		var suffix = ( time[0] < 12 ) ? "AM" : "PM";
+		 
+		time[0] = ( time[0] < 12 ) ? time[0] : time[0] - 12;
+		 
+		time[0] = time[0] || 12;
+		 
+		for ( var i = 1; i < 3; i++ )
+			if ( time[i] < 10 )
+				time[i] = "0" + time[i];
+		 
+		return date.join("/") + " " + time.join(":") + " " + suffix;
+	} 
+
+    return {
+		log: function(data){
+			var newLine = timeStamp() + "           " +  data;
+
+			logLines.push(newLine);
+
+			if (onItemAdded){
+				onItemAdded(newLine, logLines);
+			}
+		},
+		onItemAdded: function(func){
+			onItemAdded = func;
+		}
+    };
+});
+
+microKernelModule.factory('$v6urls', function() {
+   
+	var urls={
+		auth:"http://192.168.0.128:3048",
+		objectStore:"http://192.168.2.42:3000",
+		fws:"http://192.168.2.42:4000"
+	};
+
+    return urls;
 });
