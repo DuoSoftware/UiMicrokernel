@@ -1,6 +1,6 @@
 var microKernelModule = angular.module('uiMicrokernel', []);
 
-microKernelModule.factory('$objectstore', function($http, $v6urls,$auth) {
+microKernelModule.factory('$objectstore', function($http, $v6urls,$auth,$backdoor) {
   
 	function ObjectStoreClient(_namespace,_class){
 
@@ -26,8 +26,11 @@ microKernelModule.factory('$objectstore', function($http, $v6urls,$auth) {
 			  		onComplete(data);				  	
 			  }).
 			  error(function(data, status, headers, config) {
-			  	if (onError)
-			  		onError()
+			  	if (onError){
+			  		$backdoor.log("Error inserting to Object Store");
+			  		$backdoor.log(data);
+			  		onError(data)
+			  	}
 
 			  	if (onComplete){
 			  		if (data)
@@ -46,8 +49,11 @@ microKernelModule.factory('$objectstore', function($http, $v6urls,$auth) {
 				  		onGetMany(data);				  	
 				  }).
 				  error(function(data, status, headers, config) {
-				  	if (onError)
-				  		onError()
+				  	if (onError){
+				  		$backdoor.log("Error retrieveing by keyword from Object Store");
+			  			$backdoor.log(data);
+				  		onError(data)
+				  	}
 
 				  	if (onGetMany)
 				  		onGetMany();
@@ -60,8 +66,11 @@ microKernelModule.factory('$objectstore', function($http, $v6urls,$auth) {
 				  		onGetOne(data);				  	
 				  }).
 				  error(function(data, status, headers, config) {
-				  	if (onError)
+				  	if (onError){
+				  		$backdoor.log("Error retrieveing by unique key from Object Store");
+			  			$backdoor.log(data);
 				  		onError()
+				  	}
 
 				  	if (onGetOne)
 				  		onGetOne();
@@ -78,8 +87,11 @@ microKernelModule.factory('$objectstore', function($http, $v6urls,$auth) {
 				  		onGetMany(data);				  	
 				  }).
 				  error(function(data, status, headers, config) {
-				  	if (onError)
+				  	if (onError){
+				  		$backdoor.log("Error retrieveing by query from Object Store");
+			  			$backdoor.log(data);
 				  		onError()
+				  	}
 
 				  	if (onGetMany)
 				  		onGetMany();
@@ -111,9 +123,10 @@ microKernelModule.factory('$objectstore', function($http, $v6urls,$auth) {
 });
 
 
-microKernelModule.factory('$auth', function($http, $v6urls) {
+microKernelModule.factory('$auth', function($http, $v6urls, $backdoor) {
  
  	var sessionInfo;
+ 	var userName;
  	var securityToken;
 	var onLoggedInResultEvent;
 
@@ -134,6 +147,10 @@ microKernelModule.factory('$auth', function($http, $v6urls) {
 		  error(function(data, status, headers, config) {
 		  	loginResult.isSuccess = false;
 		  	loginResult.message = data;
+	  		
+	  		$backdoor.log("Auth service returned an error when logging in.");
+  			$backdoor.log(data);
+
 		  	if (onLoggedInResultEvent)
 				onLoggedInResultEvent(loginResult);
 		  });
@@ -157,34 +174,132 @@ microKernelModule.factory('$auth', function($http, $v6urls) {
   				return securityToken;
   			else
   				return "N/A";
+  		},
+  		getUserName:function(){
+  			if (userName)
+  				return userName;
+  			else{
+				var now = new Date();
+				userName = now.getHours() + ":" + now.getMinutes() + ":" +   now.getSeconds();
+  				return userName;
+  			}
   		}
 
   	}
 });
 
-microKernelModule.factory('$fws', function($rootScope, $v6urls) {
-    var socket = io.connect($v6urls.fws + "/");
+
+microKernelModule.factory('$fws', function($rootScope, $v6urls, $auth) {
+    
+    var socket
+
+	var onConnected;
+	var onConnectError;
+	var onRegistered;
+	var onDisconneted;
+
+	isOnline = false;
+
     return {
-        on: function(eventName, callback) {
-            socket.on(eventName, function() {
-                var args = arguments;
-                $rootScope.$apply(function() {
-                    callback.apply(socket, args);
-                });
+        connect: function(){
+        	if (!isOnline){
+				socket = io.connect($v6urls.fws + "/");
+				
+				socket.on("connected", function(data) {
+		        	if (data.isSuccess)
+		        	{
+			        	socket.on("message", function() {
+			                var args = arguments;
+			                var command = args[0];
+			                
+			                //$rootScope.$apply(function() {
+			                //    callback.apply(socket, args);
+			                //});
+							
+							$rootScope.$emit("fwscommand_" + command.name, command.data);
+			            });
+
+			            socket.emit("register",{userName:$auth.getUserName(), securityToken:$auth.getSecurityToken()},function(regResult){
+			            	if (onRegistered){
+			            		isOnline = true;
+			            		onRegistered();
+			            	}
+			            });
+					}
+					else {
+						if (onConnectError)
+							onConnectError(data.message);
+					}
+				});
+        	}
+        },
+        disconnect:function(){
+        	socket.close();
+        },
+        command:function(command,data){
+        	var commandObject = {name:command, type:"command", data:data, token:$auth.getSecurityToken()};
+	        socket.emit("command", commandObject, function() {
             });
         },
-        emit: function(eventName, data, callback) {
-            socket.emit(eventName, data, function() {
-                var args = arguments;
-                $rootScope.$apply(function() {
-                    if (callback) {
-                        callback.apply(socket, args);
-                    }
-                });
-            });
-        }
+        event:function(event,data){},
+        onConnected:function(func){ onConnected = func},
+        onRegistered: function(func){ onRegistered = func},
+        onDisconneted:function(func){onDisconneted =func },
+        onRecieveCommand:function(command,callback){
+			$rootScope.$on("fwscommand_" + command, callback);
+        },
+        isOnline: function(){return isOnline}
     };
 });
+
+
+microKernelModule.factory('$chat', function($rootScope, $fws) {
+
+	function setOnline(){
+		if ($fws.isOnline()){
+			addEvents();
+		}
+		else{
+			$fws.connect();
+			$fws.onRegistered(function(){
+				addEvents();
+				$rootScope.$emit("fws_chat_state", {state:"online"});
+			});
+		}
+	}
+
+	function addEvents(){
+		$fws.onRecieveCommand("chatmessage",function(e,data){
+			$rootScope.$emit("fws_chat_message", data);
+		});
+		$fws.onRecieveCommand("usersloaded", function(e,data){
+			$rootScope.$emit("fws_chat_users", data);
+		});
+	}
+
+
+	return {
+		onMessage: function(func){ $rootScope.$on("fws_chat_message", func); },
+		onUsersUpdated:function(func){ $rootScope.$on("fws_chat_users", func); },
+		onStateChanged:function(func){ $rootScope.$on("fws_chat_state", func);},
+		
+		send:function(to,from,message){
+			$fws.command("chatmessage",{to:to, from:from, message:message});
+		},
+		setOnline:function(){setOnline();},
+		setOffline:function(){},
+		getUsers:function(){}
+	};
+});
+
+
+
+microKernelModule.factory('$notifications', function($fws) {
+	return {
+		onRecieve: function(func){}
+	};
+});
+
 
 microKernelModule.factory('$backdoor', function() {
    
@@ -219,7 +334,7 @@ microKernelModule.factory('$backdoor', function() {
 				onItemAdded(newLine, logLines);
 			}
 		},
-		onItemAdded: function(func){
+		onUpdate: function(func){
 			onItemAdded = func;
 		}
     };
@@ -230,7 +345,7 @@ microKernelModule.factory('$v6urls', function() {
 	var urls={
 		auth:"http://192.168.0.128:3048",
 		objectStore:"http://192.168.2.42:3000",
-		fws:"http://192.168.2.42:4000"
+		fws:"http://localhost:4000"
 	};
 
     return urls;
