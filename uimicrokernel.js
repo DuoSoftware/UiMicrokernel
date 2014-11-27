@@ -1,12 +1,11 @@
 var microKernelModule = angular.module('uiMicrokernel', []);
 
-microKernelModule.factory('$objectstore', function($http, $v6urls) {
+microKernelModule.factory('$objectstore', function($http, $v6urls,$auth) {
   
-	function Requestor(_namespace,_class,_token){
+	function ObjectStoreClient(_namespace,_class){
 
 		var namespace = _namespace;
 		var cls = _class;
-		var token = _token;
 		var onGetOne;
 		var onGetMany;
 		var onComplete;
@@ -21,7 +20,7 @@ microKernelModule.factory('$objectstore', function($http, $v6urls) {
 				mainObject = {Parameters : parameters, Object : data};
 
 
-			$http.post($v6urls.objectStore + '/' + namespace + '/' + cls,mainObject, {headers:{"securityToken" : "123"}}).
+			$http.post($v6urls.objectStore + '/' + namespace + '/' + cls,mainObject, {headers:{"securityToken" : $auth.getSecurityToken()}}).
 			  success(function(data, status, headers, config) {
 			  	if (onComplete)
 			  		onComplete(data);				  	
@@ -41,7 +40,7 @@ microKernelModule.factory('$objectstore', function($http, $v6urls) {
 
 		return {
 			getByKeyword: function(keyword,parameters){
-				$http.get($v6urls.objectStore + '/' + namespace + '/' + cls + '?keyword=' + keyword,{headers:{"securityToken" : "123"}}).
+				$http.get($v6urls.objectStore + '/' + namespace + '/' + cls + '?keyword=' + keyword,{headers:{"securityToken" : $auth.getSecurityToken()}}).
 				  success(function(data, status, headers, config) {
 				  	if (onGetMany)
 				  		onGetMany(data);				  	
@@ -55,7 +54,7 @@ microKernelModule.factory('$objectstore', function($http, $v6urls) {
 				  });
 			},
 			getByKey: function(key){
-				$http.get($v6urls.objectStore + '/' + namespace + '/' + cls + '/' + key,{headers:{"securityToken" : "123"}}).
+				$http.get($v6urls.objectStore + '/' + namespace + '/' + cls + '/' + key,{headers:{"securityToken" : $auth.getSecurityToken()}}).
 				  success(function(data, status, headers, config) {
 				  	if (onGetOne)
 				  		onGetOne(data);				  	
@@ -73,7 +72,7 @@ microKernelModule.factory('$objectstore', function($http, $v6urls) {
 			},
 			getByFiltering: function(filter,parameters){
 				//,"Content-Type":"application/json"
-				$http.post($v6urls.objectStore + '/' + namespace + '/' + cls ,{"Query" : {"Type" : "", "Parameters": filter}}, {headers:{"securityToken" : "123"}}).
+				$http.post($v6urls.objectStore + '/' + namespace + '/' + cls ,{"Query" : {"Type" : "", "Parameters": filter}}, {headers:{"securityToken" : $auth.getSecurityToken()}}).
 				  success(function(data, status, headers, config) {
 				  	if (onGetMany)
 				  		onGetMany(data);				  	
@@ -104,8 +103,8 @@ microKernelModule.factory('$objectstore', function($http, $v6urls) {
 
 
 	return {
-  		getRequestor:function(namespace,cls,token){
-  			var req = new Requestor(namespace,cls,token);
+  		getClient:function(namespace,cls,token){
+  			var req = new ObjectStoreClient(namespace,cls,token);
   			return req;
   		}
   	}
@@ -152,6 +151,12 @@ microKernelModule.factory('$auth', function($http, $v6urls) {
   		},
   		onLoginResult: function(func){
   			onLoggedInResultEvent = func;
+  		},
+  		getSecurityToken:function(){
+  			if (securityToken)
+  				return securityToken;
+  			else
+  				return "N/A";
   		}
 
   	}
