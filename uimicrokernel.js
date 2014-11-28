@@ -115,8 +115,8 @@ microKernelModule.factory('$objectstore', function($http, $v6urls,$auth,$backdoo
 
 
 	return {
-  		getClient:function(namespace,cls,token){
-  			var req = new ObjectStoreClient(namespace,cls,token);
+  		getClient:function(namespace,cls){
+  			var req = new ObjectStoreClient(namespace,cls);
   			return req;
   		}
   	}
