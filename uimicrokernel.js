@@ -188,6 +188,20 @@ microKernelModule.factory('$auth', function($http, $v6urls, $backdoor) {
   		},
   		getSession:function(){
   			return sessionInfo;
+  		},
+  		forceLogin:function(username, password,domain){
+		  	userName = username;
+		  	var loginResult = {}
+		  	loginResult.details = {};
+
+		  	var now = new Date();
+			loginResult.securityToken = now.getHours() + ":" + now.getMinutes() + ":" +   now.getSeconds();
+
+		  	sessionInfo = loginResult.details;
+		  	securityToken = loginResult.securityToken;
+
+		  	if (onLoggedInResultEvent)
+		  		onLoggedInResultEvent(loginResult);				  	
   		}
 
   	}
@@ -217,10 +231,18 @@ microKernelModule.factory('$fws', function($rootScope, $v6urls, $auth) {
 			                var args = arguments;
 			                var command = args[0];
 			                
-			                $rootScope.$apply(function() {
-			                    //callback.apply(socket, args);
-			                    $rootScope.$emit("fwscommand_" + command.name, command.data);
-			                });
+			                if (command.type == "command"){
+				                $rootScope.$apply(function() {
+				                    //callback.apply(socket, args);
+				                    $rootScope.$emit("fwscommand_" + command.name, command.data);
+				                });
+			            	}
+			            	else { 
+				                $rootScope.$apply(function() {
+				                    //callback.apply(socket, args);
+				                    $rootScope.$emit("fwsevent_" + command.name, command.data);
+				                });
+			            	}
 							
 							
 			            });
@@ -249,19 +271,42 @@ microKernelModule.factory('$fws', function($rootScope, $v6urls, $auth) {
 	        	$rootScope.$apply();
             });
         },
-        event:function(event,data){},
+        triggerevent:function(event,data){
+        	var commandObject = {name:event, type:"event", data:data, token:$auth.getSecurityToken()};
+	        
+	        socket.emit("command", commandObject, function() {
+	        	$rootScope.$apply();
+            });
+        },
+        subscribeEvent:function(event){
+        	var commandObject = {name:event, type:"event-subscribe", data: {userName:$auth.getUserName(), event:event}, token:$auth.getSecurityToken()};
+	        
+	        socket.emit("command", commandObject, function() {
+	        	$rootScope.$apply();
+            });
+        },
+        unsubscribeEvent:function(event){ 
+        	var commandObject = {name:event, type:"event-unsubscribe", data: {userName:$auth.getUserName(), event:event}, token:$auth.getSecurityToken()};
+	        
+	        socket.emit("command", commandObject, function() {
+	        	$rootScope.$apply();
+            });
+	    },
         onConnected:function(func){ onConnected = func},
         onRegistered: function(func){ onRegistered = func},
         onDisconneted:function(func){onDisconneted =func },
         onRecieveCommand:function(command,callback){
 			$rootScope.$on("fwscommand_" + command, callback);
         },
+        onRecieveEvent:function(event,callback){
+			$rootScope.$on("fwsevent_" + event, callback);
+        },
         isOnline: function(){return isOnline}
     };
 });
 
 
-microKernelModule.factory('$chat', function($rootScope, $fws) {
+microKernelModule.factory('$chat', function($rootScope, $fws, $auth) {
 
 	function setOnline(){
 		if ($fws.isOnline()){
@@ -285,9 +330,12 @@ microKernelModule.factory('$chat', function($rootScope, $fws) {
 			$rootScope.$emit("fws_chat_users", data);
 		});
 		
-		$fws.onRecieveCommand("userstatechanged", function(e,data){
+		$fws.onRecieveEvent("userstatechanged", function(e,data){
 			$rootScope.$emit("fws_chat_user_state", data);
 		});
+
+		$fws.subscribeEvent("userstatechanged");
+
 	}
 
 
@@ -300,7 +348,7 @@ microKernelModule.factory('$chat', function($rootScope, $fws) {
 			$fws.command("chatmessage",{to:to, from:from, message:message});
 		},
 		getOnlineUsers: function(){
-
+			$fws.command("getallusers",{from:$auth.getUserName()});
 		},
 		setOnline:function(){setOnline();},
 		setOffline:function(){},
