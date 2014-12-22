@@ -1,5 +1,50 @@
 var microKernelModule = angular.module('uiMicrokernel', []);
 
+microKernelModule.factory('$helpers', function($rootScope) {
+
+	function AsyncTask(action,success,fail){
+
+		var actionFunc = action	;
+		var successFunc = success;
+		var failFunc = fail;
+
+		function start(data, taskObject) {
+			actionFunc(data, taskObject);
+		}
+
+		var taskObject = {
+			start:function(data){ 
+        		start(data, taskObject); 
+			},
+			endError: function(data){
+                 $rootScope.$apply(function() {
+            		failFunc(data); 
+                });
+			},
+			endSuccess:function(data){ 
+				
+                $rootScope.$apply(function() {
+            		successFunc(data);
+                });
+			}
+		};
+
+		return taskObject;
+
+	}
+
+	function task(actionFunc,successFunc,failFunc,inputs){
+		var newTask = new AsyncTask(actionFunc,successFunc,failFunc);
+		newTask.start(inputs);
+	}
+
+	return {
+		task: function(actionFunc,successFunc,failFunc){ task(actionFunc,successFunc,failFunc); }
+	}
+
+});
+
+
 microKernelModule.factory('$objectstore', function($http, $v6urls,$auth,$backdoor) {
   
 	function ObjectStoreClient(_namespace,_class){
@@ -123,6 +168,9 @@ microKernelModule.factory('$objectstore', function($http, $v6urls,$auth,$backdoo
 });
 
 
+
+
+
 microKernelModule.factory('$auth', function($http, $v6urls, $backdoor) {
  
  	var sessionInfo;
@@ -212,10 +260,12 @@ microKernelModule.factory('$fws', function($rootScope, $v6urls, $auth) {
     
     var socket
 
+/*
 	var onConnected;
 	var onConnectError;
 	var onRegistered;
 	var onDisconneted;
+*/
 
 	isOnline = false;
 
@@ -248,15 +298,12 @@ microKernelModule.factory('$fws', function($rootScope, $v6urls, $auth) {
 			            });
 
 			            socket.emit("register",{userName:$auth.getUserName(), securityToken:$auth.getSecurityToken()},function(regResult){
-			            	if (onRegistered){
-			            		isOnline = true;
-			            		onRegistered();
-			            	}
+			            	isOnline = true;
+							$rootScope.$emit("fws_core_registered", {});
 			            });
 					}
 					else {
-						if (onConnectError)
-							onConnectError(data.message);
+						$rootScope.$emit("fws_core_connection_error", data.message);
 					}
 				});
         	}
@@ -292,9 +339,9 @@ microKernelModule.factory('$fws', function($rootScope, $v6urls, $auth) {
 	        	$rootScope.$apply();
             });
 	    },
-        onConnected:function(func){ onConnected = func},
-        onRegistered: function(func){ onRegistered = func},
-        onDisconneted:function(func){onDisconneted =func },
+        onConnected:function(func){ $rootScope.$on("webrtc_chat_call_establishing", func);},
+        onRegistered: function(func){ $rootScope.$on("fws_core_registered", func);},
+        onDisconneted:function(func){$rootScope.$on("webrtc_chat_call_establishing", func); },
         onRecieveCommand:function(command,callback){
 			$rootScope.$on("fwscommand_" + command, callback);
         },
@@ -308,55 +355,437 @@ microKernelModule.factory('$fws', function($rootScope, $v6urls, $auth) {
 
 microKernelModule.factory('$chat', function($rootScope, $fws, $auth) {
 
-	function setOnline(){
-		if ($fws.isOnline()){
-			addEvents();
-		}
-		else{
-			$fws.connect();
-			$fws.onRegistered(function(){
-				addEvents();
-				$rootScope.$emit("fws_chat_state", {state:"online"});
-			});
-		}
-	}
-
-	function addEvents(){
+	$fws.onRegistered(function(){
 		$fws.onRecieveCommand("chatmessage",function(e,data){
 			$rootScope.$emit("fws_chat_message", data);
 		});
-		
-		$fws.onRecieveCommand("usersloaded", function(e,data){
-			$rootScope.$emit("fws_chat_users", data);
-		});
-		
-		$fws.onRecieveEvent("userstatechanged", function(e,data){
-			$rootScope.$emit("fws_chat_user_state", data);
-		});
-
-		$fws.subscribeEvent("userstatechanged");
-
-	}
+	});
 
 
 	return {
 		onMessage: function(func){ $rootScope.$on("fws_chat_message", func); },
-		onOnlineUsersLoaded:function(func){ $rootScope.$on("fws_chat_users", func);},
-		onUserStateChanged:function(func){ $rootScope.$on("fws_chat_user_state", func); },
-		onStateChanged:function(func){ $rootScope.$on("fws_chat_state", func);},
 		send:function(to,from,message){
 			$fws.command("chatmessage",{to:to, from:from, message:message});
-		},
-		getOnlineUsers: function(){
-			$fws.command("getallusers",{from:$auth.getUserName()});
-		},
-		setOnline:function(){setOnline();},
-		setOffline:function(){},
-		getUsers:function(){}
+		}
 	};
 });
 
+microKernelModule.factory('$webrtc', function($fws, $auth,$rootScope, $helpers) {
+	//idle,establishing, outgoing,incoming,oncall
 
+	var isStreamStarted = false;
+
+	var localStream, localPeerConnection;
+
+	var localVideo,remoteVideo;
+
+	var partnerDescription,localDescription;
+	
+	var toUserName;
+
+	var sendChannel, receiveChannel;
+
+	var servers = null;
+
+	var currentState = "idle";
+
+	if (navigator.webkitGetUserMedia) {
+		RTCPeerConnection = webkitRTCPeerConnection;
+	} else if(navigator.mozGetUserMedia){
+		RTCPeerConnection = mozRTCPeerConnection;
+		RTCSessionDescription = mozRTCSessionDescription;
+		RTCIceCandidate = mozRTCIceCandidate;
+	}
+
+	$fws.onRecieveCommand("webrtc",function(e,data){
+		handleState(data.from, data.state,data.data);
+	});
+
+	$fws.onRecieveCommand("webrtc_candidate",function(e,data){
+		var candidate = new RTCIceCandidate({sdpMLineIndex:data.label, candidate:data.candidate});
+		localPeerConnection.addIceCandidate(candidate);
+	});
+
+	function handleState(from, state,data){
+
+		switch(state){
+			case "idle":
+				switch(currentState){
+					case "establishing":
+						$rootScope.$emit("webrtc_chat_call_establishing_error", data);
+						break;
+					case "outgoing":
+						$rootScope.$emit("webrtc_chat_call_cancled", data);
+						break;
+					case "incoming":
+						$rootScope.$emit("webrtc_chat_rejected", data);
+						break;
+					case "oncall":
+						$rootScope.$emit("webrtc_chat_ended", data);
+						break;
+				}
+				break;
+			case "establishing":
+				if (currentState == "idle"){
+					$rootScope.$emit("webrtc_chat_call_establishing", data);
+				}
+				break;
+			case "outgoing":
+				if (currentState == "establishing"){
+					$rootScope.$emit("webrtc_chat_call_establishing_success", data);
+				}
+				break;
+			case "incoming":
+				if (currentState == "idle"){
+					partnerDescription = data;
+					toUserName = data.from;
+
+					localPeerConnection = new RTCPeerConnection(servers);
+					localPeerConnection.addStream(localStream);
+
+					localPeerConnection.onicecandidate = gotLocalIceCandidate;
+					localPeerConnection.onaddstream = gotRemoteStream;
+
+					forwardCommand(from, "outgoing", {});
+					$rootScope.$emit("webrtc_chat_ringing", data);
+				}
+				break;
+			case "oncall":
+				switch(currentState){
+					case "outgoing":
+						partnerDescription = data;
+						//handle answer for outgoing call
+						answerOtherSide();
+						$rootScope.$emit("webrtc_chat_reciever_answered", data);
+						break;
+					case "incoming":
+						
+						$rootScope.$emit("webrtc_chat_answered", data);
+						break;
+				}
+				
+				break;
+		}
+
+		currentState = state;
+		$rootScope.$emit("webrtc_chat_state_change", state);
+
+	}
+
+	//to, command, data, persistIfOffline, alwaysPersist
+
+	function forwardCommand(to, state, args){
+		$fws.command("commandforward",{to:to, command:"webrtc", data:{state:state, data:args, from:$auth.getUserName()}, persistIfOffline:false, alwaysPersist:false});
+	}
+
+
+
+
+	function startLocalStream(){
+		navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia;
+		
+		navigator.getUserMedia({audio:true, video:true}, function(stream){
+			if (window.URL) {
+				localVideo.src = URL.createObjectURL(stream);
+			} else {
+				localVideo.src = stream;
+			}
+
+			localStream = stream;
+			isStreamStarted = true;
+		},
+		function(error) {
+			
+		});
+	}
+
+	function getLocalSDP(to, task) {
+
+		toUserName = to;
+
+		/*
+		if(navigator.webkitGetUserMedia) {
+			if (localStream.getVideoTracks().length > 0) {
+				log('Using video device: ' + localStream.getVideoTracks()[0].label);
+			}
+			if (localStream.getAudioTracks().length > 0) {
+				log('Using audio device: ' + localStream.getAudioTracks()[0].label);
+			}
+		}
+		*/
+
+		localPeerConnection = new RTCPeerConnection(servers);
+		localPeerConnection.addStream(localStream);
+
+		localPeerConnection.onicecandidate = gotLocalIceCandidate;
+		localPeerConnection.onaddstream = gotRemoteStream;
+	
+	
+
+		try {
+		
+			sendChannel = localPeerConnection.createDataChannel("sendDataChannel",{reliable: true});
+			
+		} catch (e) {
+			alert('Failed to create data channel. ');
+			
+		}
+
+		sendChannel.onopen = handleSendChannelStateChange;
+		sendChannel.onmessage = handleMessage;
+		sendChannel.onclose = handleSendChannelStateChange;
+
+		var localDescFunc =	function (description){
+		localPeerConnection.setLocalDescription(description);
+		
+		task.endSuccess({sdp:description.sdp, type:"offer", from:$auth.getUserName()});
+		//task.endSuccess(description);
+
+		}
+
+		localPeerConnection.createOffer(localDescFunc, onSignalingError);
+	}
+
+
+
+	function handleReceiveChannelStateChange() {
+		var readyState = sendChannel.readyState;
+		console.log('Send channel state is: ' + readyState);
+		if (readyState == "open") {
+
+		} else {
+		}
+	}
+
+
+	function handleSendChannelStateChange() {
+		var readyState = sendChannel.readyState;
+		console.log('Send channel state is: ' + readyState);
+		if (readyState == "open") {
+
+		} else {
+		}
+	}
+
+	function handleMessage(event) {
+		console.log('Received message: ' + event.data);
+	}
+
+
+	function answerOtherSide(){
+		var desc = new RTCSessionDescription();
+		desc.sdp = partnerDescription.sdp;
+		desc.type = partnerDescription.type;
+		localPeerConnection.setRemoteDescription(desc);
+		localPeerConnection.createAnswer(gotRemoteDescription, onSignalingError);		
+	}
+
+	function gotRemoteDescription (description){
+		localPeerConnection.setRemoteDescription(description);
+	}
+
+
+	function answerThisSide(task){
+		var desc = new RTCSessionDescription();
+		desc.sdp = partnerDescription.sdp;
+		desc.type = partnerDescription.type;
+
+
+		/*
+		localPeerConnection = new RTCPeerConnection(servers);
+		localPeerConnection.addStream(localStream);
+
+		localPeerConnection.onicecandidate = gotLocalIceCandidate;
+		localPeerConnection.onaddstream = gotRemoteStream;
+		*/
+
+		localPeerConnection.setRemoteDescription(desc);
+		
+		try {
+		
+			sendChannel = localPeerConnection.createDataChannel("sendDataChannel",{reliable: true});
+			
+		} catch (e) {
+			alert('Failed to create data channel. ');
+			
+		}
+
+		sendChannel.ondatachannel = function (event) {
+			trace('Receive Channel Callback');
+			receiveChannel = event.channel;
+			receiveChannel.onmessage = handleMessage;
+			receiveChannel.onopen = handleReceiveChannelStateChange;
+			receiveChannel.onclose = handleReceiveChannelStateChange;
+		};
+
+
+
+		localPeerConnection.createAnswer(			
+			function (description){
+				localPeerConnection.setLocalDescription(description);		
+				
+				task.endSuccess({sdp:description.sdp, type:"answer"});
+			}, function (error){
+				console.log("Call Answer ERROR!!!");
+			});		
+
+
+	}
+
+
+	function hangup() {
+		localPeerConnection.close();
+	}
+
+	function gotRemoteStream(event){
+		if (window.URL) {
+			// Chrome
+			var url= window.URL.createObjectURL(event.stream);
+			console.log("Remote Stream Url : " + url);
+			remoteVideo.src = url;
+
+		} else {
+			// Firefox
+			remoteVideo.src = event.stream;
+		}
+	}
+
+
+	function gotLocalIceCandidate(event){
+		if (event.candidate) {
+			localPeerConnection.addIceCandidate(new RTCIceCandidate(event.candidate));
+
+			var sendData = {
+							type: 'candidate',
+							label: event.candidate.sdpMLineIndex,
+							id: event.candidate.sdpMid,
+							candidate: event.candidate.candidate
+						};
+
+			$fws.command("commandforward",{to:toUserName, command:"webrtc_candidate", data:sendData, persistIfOffline:false, alwaysPersist:false});
+
+
+		}
+	}
+
+
+	function onSignalingError(error){
+		console.log(error);
+	}
+
+	return {
+		onCallEstablishing: function(func){$rootScope.$on("webrtc_chat_call_establishing", func);},
+		onCallEstablishError: function(func){$rootScope.$on("webrtc_chat_call_establishing_error", func);},
+		onCallEstablishSuccess: function(func){$rootScope.$on("webrtc_chat_call_establishing_success", func);},
+		onCallCallCancelled: function(func){$rootScope.$on("webrtc_chat_call_cancled", func);},
+		onRecieverAnswered: function(func){$rootScope.$on("webrtc_chat_reciever_answered", func);},
+		onRejected: function(func){$rootScope.$on("webrtc_chat_rejected", func);},
+		onRinging: function(func){$rootScope.$on("webrtc_chat_ringing", func);},
+		onAnswered: function(func){$rootScope.$on("webrtc_chat_answered", func);},
+		onEnded: function(func){$rootScope.$on("webrtc_chat_ended", func);},
+		onStateChange: function(func){$rootScope.$on("webrtc_chat_state_change", func);},
+		getState: function(){ return currentState;},
+		
+		call: function(to, args){ 
+			
+			$helpers.task(function(data, task){
+				//call method to get current SDP
+				getLocalSDP(to, task);
+			}, function(data){
+				forwardCommand(to, "incoming", data);  
+				handleState($auth.getUserName(), "establishing",{});
+
+			}, function(data){
+
+			});
+		},
+		
+		reject: function(to, args){ 
+			forwardCommand(to, "idle", args); 
+			handleState($auth.getUserName(), "idle",{});
+		},
+		
+		answer:function(to, args){ 
+
+			$helpers.task(function(data, task){
+				//call method to get current SDP
+				//getLocalSDP("", task);
+
+				answerThisSide(task);
+
+			}, function(data){
+				
+				//handle answer for incoming call
+				//createRemoteAnswer();
+
+				forwardCommand(to, "oncall", data); 
+				handleState($auth.getUserName(), "oncall",data);
+			}, function(data){
+
+			});
+		},
+		
+		end:function(to, args){ 
+			hangup();
+
+			forwardCommand(to, "idle", args);  
+			handleState($auth.getUserName(), "idle",{});
+		},
+
+		setVideoTags: function(localVideoTag,remoteVideoTag){
+			localVideo = document.getElementById(localVideoTag);
+			remoteVideo = document.getElementById(remoteVideoTag);
+		},
+
+		startLocalStream: function(){
+			startLocalStream();
+		},
+
+		startRemoteStream: function(){
+
+		},
+		stopLocalStream: function(){
+
+		},
+		stopRemoteStream:function(){
+
+		}
+	};
+});
+
+microKernelModule.factory('$presence', function($fws,$rootScope, $auth) {
+	
+	function setOnline(){
+		$fws.connect();	
+	}
+	
+	$fws.onRegistered(function(){
+		
+		$fws.onRecieveCommand("usersloaded", function(e,data){
+			$rootScope.$emit("fws_pres_users", data);
+		});
+		
+		$fws.onRecieveEvent("userstatechanged", function(e,data){
+			$rootScope.$emit("fws_pres_user_state", data);
+		});
+
+		$fws.subscribeEvent("userstatechanged");
+		$rootScope.$emit("fws_pres_state", {state:"online"});
+	});
+
+
+	return {
+		setOnline:function(){setOnline();},
+		setOffline:function(){},
+		onOnlineUsersLoaded:function(func){ $rootScope.$on("fws_pres_users", func);},
+		onUserStateChanged:function(func){ $rootScope.$on("fws_pres_user_state", func); },
+		onStateChanged:function(func){ $rootScope.$on("fws_pres_state", func);},
+		getOnlineUsers: function(){
+			$fws.command("getallusers",{from:$auth.getUserName()});
+		},
+		getUsers:function(){}
+	};
+});
 
 microKernelModule.factory('$notifications', function($fws) {
 	return {
