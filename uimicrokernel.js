@@ -269,6 +269,15 @@ microKernelModule.factory('$fws', function($rootScope, $v6urls, $auth) {
 
 	isOnline = false;
 
+
+	function triggerCommand(command, data){
+    	var commandObject = {name:command, type:"command", data:data, token:$auth.getSecurityToken()};
+        
+        socket.emit("command", commandObject, function() {
+        	$rootScope.$apply();
+        });
+	}
+
     return {
         connect: function(){
         	if (!isOnline){
@@ -312,12 +321,12 @@ microKernelModule.factory('$fws', function($rootScope, $v6urls, $auth) {
         	socket.close();
         },
         command:function(command,data){
-        	var commandObject = {name:command, type:"command", data:data, token:$auth.getSecurityToken()};
-	        
-	        socket.emit("command", commandObject, function() {
-	        	$rootScope.$apply();
-            });
+        	triggerCommand(command,data);
         },
+		forward: function(to, command, data){
+			data.from = $auth.getUserName();
+			triggerCommand("commandforward",{to:to, command:command, data:data, persistIfOffline:false, alwaysPersist:false});			
+		},
         triggerevent:function(event,data){
         	var commandObject = {name:event, type:"event", data:data, token:$auth.getSecurityToken()};
 	        
@@ -366,6 +375,24 @@ microKernelModule.factory('$chat', function($rootScope, $fws, $auth) {
 		onMessage: function(func){ $rootScope.$on("fws_chat_message", func); },
 		send:function(to,from,message){
 			$fws.command("chatmessage",{to:to, from:from, message:message});
+		}
+	};
+});
+
+microKernelModule.factory('$matrics', function($rootScope, $fws, $auth) {
+
+	$fws.onRecieveCommand("matrics",function(e,data){
+		//{serverId:"xxx", category:"yyy", matrics:{}}
+		$rootScope.$emit("fws_matric_message", data);
+	});
+	
+	return {
+		onMessage: function(func){ $rootScope.$on("fws_matric_message", func); },
+		on:function(serverId){
+			$fws.forward(serverId, "matricMessage",{state:"on"});
+		},
+		off:function(serverId){
+			$fws.forward(serverId, "matricMessage",{state:"off"});
 		}
 	};
 });
@@ -843,3 +870,4 @@ microKernelModule.factory('$v6urls', function() {
 
     return urls;
 });
+
