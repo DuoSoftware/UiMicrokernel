@@ -379,21 +379,107 @@ microKernelModule.factory('$chat', function($rootScope, $fws, $auth) {
 	};
 });
 
-microKernelModule.factory('$matrics', function($rootScope, $fws, $auth) {
+microKernelModule.factory('$agent', function($rootScope, $fws, $auth) {
 
-	$fws.onRecieveCommand("matrics",function(e,data){
+	$fws.onRecieveCommand("agentResponse",function(e,data){
 		//{serverId:"xxx", category:"yyy", matrics:{}}
-		$rootScope.$emit("fws_matric_message", data);
+		$rootScope.$emit("fws_agent_info", data);
+
+		switch(data.class){
+			case "log":
+				$rootScope.$emit("fws_agent_log", data);
+				break;
+			case "stat":
+				$rootScope.$emit("fws_agent_stat", data);
+				break;
+			case "tenant":
+				$rootScope.$emit("fws_agent_tenant", data);
+				break;
+			case "agent":
+				$rootScope.$emit("fws_agent_agent", data);
+				break;
+			case "response":
+				if (response.type =="tenantSave")
+					$rootScope.$emit("fws_agent_response_tenantSave", data);
+				else if (response.type =="agentSave")
+					$rootScope.$emit("fws_agent_response_agentSave", data);
+
+				break;
+		}
 	});
 	
+
+	function getTenantInfo(){
+		var data = {
+			tenant:{name:"DuoV6 Tenant"},
+			servers:[{name:"duov6server", agentName:"duov6server@duov6.com", ip:"192.168.2.42",dockers:[
+				{name : "objectstore1", agentName:"objectstore1@duov6.com",ip:"192.168.2.43", contentType:"ObjectStore"},
+				{name : "elastic1", agentName:"elastic1@duov6.com", ip:"192.168.2.44", contentType:"ElasticSearch"},
+				{name : "elastic2", agentName:"elastic2@duov6.com", ip:"192.168.2.45", contentType:"ElasticSearch"},
+				{name : "elastic3", agentName:"elastic3@duov6.com", ip:"192.168.2.46", contentType:"ElasticSearch"},
+				{name : "couchbase1", agentName:"couchbase1@duov6.com", ip:"192.168.2.47", contentType:"Couchbase"},
+				{name : "redis1", agentName:"redis1@duov6.com", ip:"192.168.2.48", contentType:"Redis"},
+				{name : "duoauth1", agentName:"duoauth1@duov6.com", ip:"192.168.2.49", contentType:"DuoAuth"}
+			]}],
+			config:[{code: "tenantconfig", name:"Tenant Configuration", description:"This is the tenant configuration", 
+				config:[{
+					justASetting:"",
+					anotherSetting:""
+				}]}]
+		};
+
+		$rootScope.$emit("fws_agent_tenant", data);
+
+	}
+
+	function getAgentInfo(agent){
+		var data = {
+			commands:[
+				{code:"createDocker", name:"Create Docker", description:"Creates a Docker.", parameters:["Docker Name", "Server Type"]},
+				{code:"deleteDocker", name: "Delete Docker", description:"Deletes a Docker.", parameters:["Docker Name", "Server Type"]}
+				],
+			config:[{code :"serverConfig", name:"Server Configuration", parameters:["One","Two","Three"]}],
+			info:{
+				stats:[{type:"resource"}, {type:"requests"}],
+				logs:[{type:"output"}, {type:"special"}]
+			}
+		};
+
+		$rootScope.$emit("fws_agent_agent", data);
+
+	}
+
+	function saveTenantConfig(data){
+		var resData = {};
+		$rootScope.$emit("fws_agent_response_tenantSave", resData);
+	}
+
+	function saveAgentConfig(data){
+		var resDatas = {};
+		$rootScope.$emit("fws_agent_response_agentSave", resData);
+	} 
+
+	function command(command,data){
+
+	}
+
 	return {
-		onMessage: function(func){ $rootScope.$on("fws_matric_message", func); },
+		onInfo: function(func){ $rootScope.$on("fws_agent_info", func); },
+		onTenantInfo: function(func){$rootScope.$on("fws_agent_tenant", func);},
+		onAgentInfo: function(func){$rootScope.$on("fws_agent_agent", func);},
+		onLogInfo: function(func){$rootScope.$on("fws_agent_log", func);},
+		onStatInfo: function(func){$rootScope.$on("fws_agent_stat", func);},
 		on:function(serverId){
-			$fws.forward(serverId, "matricMessage",{state:"on"});
+			$fws.forward(serverId, "agentCommand", {command: "switch", data: {state:"on"}});
 		},
 		off:function(serverId){
-			$fws.forward(serverId, "matricMessage",{state:"off"});
-		}
+			$fws.forward(serverId, "agentCommand", {command: "switch", data: {state:"off"}} );
+		},
+		getTenantInfo: function(){getTenantInfo();},
+		saveTenantConfig: function(data){saveTenantConfig(data);},
+		getAgentInfo: function(agent){getAgentInfo(agent);},
+		saveAgentConfig: function(data){saveAgentConfig(data)},
+		command: function(command,data){ command(command,data);}
 	};
 });
 
@@ -865,7 +951,7 @@ microKernelModule.factory('$v6urls', function() {
 	var urls={
 		auth:"http://192.168.2.40:3048",
 		objectStore:"http://192.168.2.42:3000",
-		fws:"http://localhost:4000"
+		fws:"http://192.168.2.42:4000"
 	};
 
     return urls;

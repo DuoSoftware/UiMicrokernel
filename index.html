@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en" ng-app="mainApp">
+<head>
+	<meta charset="utf-8">
+	<title>UI Microkernel Test</title>
+	<link rel="stylesheet" href="jquery-ui.css">
+	<script src="jquery-1.11.2.js"></script>
+	<script src="jquery-ui.js"></script>
+	<script src="angular.min.js"></script>
+	<script src="socket.io-1.2.0.js"></script>
+	<script src="uimicrokernel.js"></script>
+	<script src="main.js"></script>
+	
+	 <style>
+		#feedback { font-size: 1.4em; }
+		.chatUserStyle { background: white; }
+		.chatUserStyle .ui-selecting { background: #FECA40; }
+		.chatUserStyle .ui-selected { background: #F39814; color: white; }
+		.chatUserStyle { list-style-type: none; margin: 0; padding: 0; width: 200px; }
+		.chatUserStyle li { margin: 3px; padding: 0.4em; font-size: 1.4em; height: 18px; }
+	</style>
+
+	<script>
+		$(function() {
+			$("#tabs").tabs();
+			$("#dialog").dialog({width: "400"});
+
+		});
+	</script>
+</head>
+	<body ng-controller="mainController">
+
+	<div id="dialog" title="V6 Login" width="400">
+		<table width="100%">
+			<tr>
+				<td>User Name</td>
+				<td align="right"><input type="text" ng-model="currentUser"/></td>
+			</tr>
+			<tr>
+				<td>Password</td>
+				<td align="right"><input type="password" ng-model="password"/></td>
+			</tr>
+			<tr>
+				<td colspan="2" align="right">
+					<input type="button" value="Login" ng-click="login()"/>
+				</td>
+			</tr>
+		</table>
+	</div>
+
+	<div id="tabs">
+		<ul>
+			<li><a href="#tabs-1">Chat</a></li>
+			<li><a href="#tabs-2">WebRTC</a></li>
+			<li><a href="#tabs-3">Object Store</a></li>
+			<li><a href="#tabs-4">Remote Monitoring</a></li>
+			<li><a href="#tabs-last">Backdoor</a></li>
+		</ul>	
+		<div id="tabs-1">
+			<h3>Selected User : {{toUser}}</h3>
+			<ol id="chatUsers" class="chatUserStyle">
+				<li class="ui-widget-content" ng-repeat="u in allUsers"><div width="100%"><input type="button" value="{{u.userName}}" ng-click="selectUser(u)"/></div></li>
+			</ol>
+
+			<p>Message: </p> <input type="text" ng-model="currentMessage"/> <input type="button" value="Send" ng-click="sendMessage()"/>
+			<p ng-repeat="msg in messages">{{msg}}</p>
+		</div>
+
+		<div id="tabs-2">
+		<table>
+			<h3>Selected User : {{toUser}}</h3>
+			<tr><td><p>WebRTC State : {{displayState}}</p></td></tr>
+
+			<tr>
+				<td colspan="2">
+					<input type="button" ng-click="startStream()" value="Start Webcam"/>
+					<input type="button" ng-click="answer()" value="Answer"/>
+					<input type="button" ng-click="reject()" value="Reject"/>
+					<input type="button" ng-click="call()" value="Call"/>
+				</td>
+			</tr>
+			<tr>
+				<td colspan="2">
+				<ol id="webRtcUsers" class="chatUserStyle">
+					<li class="ui-widget-content" ng-repeat="u in allUsers"><div width="100%" ng-click="selectUser(u)">{{u.userName}}</div></li>
+				</ol>
+				</td>
+				<!--input type="text" ng-model="toUser"/><input type="button" ng-click="call()" value="Call"/-->
+			</tr>
+			<tr>
+				<td><video id="idLocalStream" autoplay=""></video></td>
+				<td><video id="idRemoteStream" autoplay=""></video></td>
+			</tr>
+
+	</table>
+		</div>
+
+		<div id="tabs-3">
+			<input type="button" value="Save New" ng-click="objectStoreSave()"/>
+			<input type="button" value="Load All" ng-click="objectStoreLoad()"/>
+
+			<p ng-repeat="n in osNames">{{n}}<br/></p>
+		</div>
+
+		<div id="tabs-4">
+			<table>
+				<tr>
+					<td>
+						<td><input type="button" ng-click="on()" value="On"/></td>
+						<td><input type="button" ng-click="off()" value="Off"/></td>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<td><input type="button" ng-click="getTenantInfo()" value="Get Tenant Info"/></td>
+						<td><input type="button" ng-click="getAgentInfo()" value="Get Agent Info"/></td>
+					</td>
+				</tr>
+
+			</table>
+
+			<p ng-repeat="n in allmatrics">{{n}}<br/></p>
+		</div>
+
+		<div id="tabs-last">
+			<p ng-repeat="n in logs">{{n}}<br/></p>
+		</div>
+
+	</div>
+	</body>
+</html>
