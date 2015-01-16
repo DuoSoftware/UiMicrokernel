@@ -1,5 +1,21 @@
 var microKernelModule = angular.module('uiMicrokernel', []);
 
+microKernelModule.directive('fileModel', ['$parse', function ($parse) {
+    return {
+        restrict: 'A',
+        link: function(scope, element, attrs) {
+            var model = $parse(attrs.fileModel);
+            var modelSetter = model.assign;
+            
+            element.bind('change', function(){
+                scope.$apply(function(){
+                    modelSetter(scope, element[0].files[0]);
+                });
+            });
+        }
+    };
+}]);
+
 microKernelModule.factory('$helpers', function($rootScope) {
 
 	function AsyncTask(action,success,fail){
@@ -379,6 +395,59 @@ microKernelModule.factory('$chat', function($rootScope, $fws, $auth) {
 	};
 });
 
+microKernelModule.factory('$srs', function($rootScope, $fws, $auth) {
+
+	var state = "idle";
+
+	$fws.onRegistered(function(){
+		$fws.onRecieveCommand("resourceAcquired",function(e,data){
+			setState("acquired");
+			$rootScope.$emit("fws_srs_acquired", data);
+		});
+
+		$fws.onRecieveCommand("resourceQueued",function(e,data){
+			setState("queued");
+			$rootScope.$emit("fws_srs_queued", data);
+		});
+
+		$fws.onRecieveCommand("resourceReleased",function(e,data){
+			setState("idle");
+			$rootScope.$emit("fws_srs_released", data);
+		});
+
+	});
+
+	function setState(_s){
+		state = _s;
+		$rootScope.$emit("fws_srs_state", {state: state});
+	}
+
+	return {
+		onStateChanged: function(func){ $rootScope.$on("fws_srs_state", func); },
+		onResourceAcquired: function(func){ $rootScope.$on("fws_srs_acquired", func); },
+		onResourceQueued: function(func){ $rootScope.$on("fws_srs_queued", func); },
+		onResourceReleased: function(func){ $rootScope.$on("fws_srs_released", func); },
+		getResource:function(to,from,message){
+			if (state == "idle"){
+				$fws.command("getresource",{type:"agent", requestor:$auth.getUserName(), criteria:[
+						{category:"language", values:[{key:"sinhala", value:80}]}
+					]
+				});
+			}
+		},
+		releaseResource: function(id){
+			if (state === "acquired"){
+				var reqObj ={id:id, requestor:$auth.getUserName() };
+				$fws.command("releaseresource", reqObj);
+				var x = 12;
+			}
+		},
+		getState: function(){
+			return {state: state};
+		}
+	};
+});
+
 microKernelModule.factory('$agent', function($rootScope, $fws, $auth) {
 
 	$fws.onRecieveCommand("agentResponse",function(e,data){
@@ -409,26 +478,23 @@ microKernelModule.factory('$agent', function($rootScope, $fws, $auth) {
 	});
 	
 
-	function getTenantInfo(){
-		var data = {
-			tenant:{name:"DuoV6 Tenant"},
-			servers:[{name:"duov6server", agentName:"duov6server@duov6.com", ip:"192.168.2.42",dockers:[
-				{name : "objectstore1", agentName:"objectstore1@duov6.com",ip:"192.168.2.43", contentType:"ObjectStore"},
-				{name : "elastic1", agentName:"elastic1@duov6.com", ip:"192.168.2.44", contentType:"ElasticSearch"},
-				{name : "elastic2", agentName:"elastic2@duov6.com", ip:"192.168.2.45", contentType:"ElasticSearch"},
-				{name : "elastic3", agentName:"elastic3@duov6.com", ip:"192.168.2.46", contentType:"ElasticSearch"},
-				{name : "couchbase1", agentName:"couchbase1@duov6.com", ip:"192.168.2.47", contentType:"Couchbase"},
-				{name : "redis1", agentName:"redis1@duov6.com", ip:"192.168.2.48", contentType:"Redis"},
-				{name : "duoauth1", agentName:"duoauth1@duov6.com", ip:"192.168.2.49", contentType:"DuoAuth"}
-			]}],
-			config:[{code: "tenantconfig", name:"Tenant Configuration", description:"This is the tenant configuration", 
-				config:[{
-					justASetting:"",
-					anotherSetting:""
-				}]}]
-		};
+	function getClusterInfo(){
+		var data = [
+		{group:"tenant", caption:"Tenant", subitems:[{caption:"DuoV6 Tenant", displayType:"tenant", displayId:"duov6tenant", description:"..."}]},
+		{group:"servers", caption:"Servers", subitems:[{caption:"duov6server", displayType:"agent", displayId:"duov6server@duov6.com", subitems:[
+				{name : "objectstore1", caption: "objectstore1@duov6.com", displayId:"objectstore1@duov6.com", displayType:"agent", description:"..."},
+				{name : "elastic1", caption: "elastic1@duov6.com", displayId:"elastic1@duov6.com", displayType:"agent", description:"..."},
+				{name : "elastic2", caption: "elastic2@duov6.com", displayId:"elastic2@duov6.com", displayType:"agent", description:"..."},
+				{name : "elastic3", caption: "elastic3@duov6.com", displayId:"elastic3@duov6.com", displayType:"agent", description:"..."},
+				{name : "couchbase1", caption: "couchbase1@duov6.com", displayId:"couchbase1@duov6.com", displayType:"agent", description:"..."},
+				{name : "redis1", caption: "redis1@duov6.com", displayId:"redis1@duov6.com", displayType:"agent", description:"..."},
+				{name : "duoauth1", caption: "duoauth1@duov6.com", displayId:"duoauth1@duov6.com", displayType:"agent", description:"..."}
+			]}]},
+		{group:"config", caption: "Configuration", subitems:[{name: "tenantconfig", displayType:"config", displayId:"tenantConfig", caption:"Tenant Configuration", description:"This is the tenant configuration"}
+		]}];
 
-		$rootScope.$emit("fws_agent_tenant", data);
+
+		$rootScope.$emit("fws_agent_cluster", data);
 
 	}
 
@@ -449,37 +515,62 @@ microKernelModule.factory('$agent', function($rootScope, $fws, $auth) {
 
 	}
 
-	function saveTenantConfig(data){
+	function getDisplayInfo(type, id){
+		var data = [];
+
+		switch (type){
+			case "tenant":
+				data = [
+				{name:"tenantinfo", displayType:"tenantinfo", displayId:"0", caption:"Info", displayInfo:[]},
+				{name:"tenantinfo", displayType:"tenantinfo", displayId:"0", caption:"Stats", displayInfo:[]},
+				{name:"tenantinfo", displayType:"tenantinfo", displayId:"0", caption:"Users", displayInfo:[]}
+				];
+				break;
+			case "agent":
+				data = [{name:"agent", displayType:"agent", displayId:"agent1@duosoftware.com", caption:"Info", displayInfo:[]}];
+				break;
+			case "config":
+				data = [{name:"config", displayType:"config", displayId:"agent1@duosoftware.com", caption:"Configuration", displayInfo:[]}];
+				break;
+
+		}
+		
+
+		$rootScope.$emit("fws_agent_displayinfo", data);
+	}
+
+	function getConfigInfo(id){
+		$rootScope.$emit("fws_agent_config", {});
+	}
+
+	function saveConfig(id, data){
 		var resData = {};
 		$rootScope.$emit("fws_agent_response_tenantSave", resData);
 	}
-
-	function saveAgentConfig(data){
-		var resDatas = {};
-		$rootScope.$emit("fws_agent_response_agentSave", resData);
-	} 
 
 	function command(command,data){
 
 	}
 
 	return {
-		onInfo: function(func){ $rootScope.$on("fws_agent_info", func); },
-		onTenantInfo: function(func){$rootScope.$on("fws_agent_tenant", func);},
-		onAgentInfo: function(func){$rootScope.$on("fws_agent_agent", func);},
-		onLogInfo: function(func){$rootScope.$on("fws_agent_log", func);},
-		onStatInfo: function(func){$rootScope.$on("fws_agent_stat", func);},
+		onClusterInfo: function(func){$rootScope.$on("fws_agent_cluster", func);},
+		onDisplayInfo: function(func){$rootScope.$on("fws_agent_displayinfo", func);},
+
+		onAgentLogInfo: function(func){$rootScope.$on("fws_agent_log", func);},
+		onAgentStatInfo: function(func){$rootScope.$on("fws_agent_stat", func);},
+		
 		on:function(serverId){
 			$fws.forward(serverId, "agentCommand", {command: "switch", data: {state:"on"}});
 		},
 		off:function(serverId){
 			$fws.forward(serverId, "agentCommand", {command: "switch", data: {state:"off"}} );
 		},
-		getTenantInfo: function(){getTenantInfo();},
-		saveTenantConfig: function(data){saveTenantConfig(data);},
-		getAgentInfo: function(agent){getAgentInfo(agent);},
-		saveAgentConfig: function(data){saveAgentConfig(data)},
-		command: function(command,data){ command(command,data);}
+		
+		getClusterInfo: function(){getClusterInfo();},
+		getDisplayInfo: function(type,id){getDisplayInfo(type,id);},
+
+		saveConfig: function(id,data){saveConfig(id,data);},
+		agentCommand: function(command,data){ command(command,data);}
 	};
 });
 
@@ -907,6 +998,32 @@ microKernelModule.factory('$notifications', function($fws) {
 });
 
 
+microKernelModule.factory('$uploader', function ($http, $v6urls, $rootScope) {
+    function upload(namespace, cls, file){
+    	
+		uploadUrl = $v6urls.objectStore + "/" + namespace + "/" + cls + "/" + file.name + "/";
+		var fd = new FormData();
+		fd.append('file', file);
+
+		$http.post(uploadUrl, fd, {
+			transformRequest: angular.identity,
+			headers: {'Content-Type': undefined}
+		})
+		.success(function(e){
+			$rootScope.$emit("uploader_success", e);
+		})
+		.error(function(e){
+			$rootScope.$emit("uploader_fail", e);
+		});
+    }
+
+    return {
+    	upload: function(namespace, cls, file){ upload(namespace, cls, file)},
+    	onSuccess:function(func){$rootScope.$on("uploader_success", func);},
+    	onError:function(func){$rootScope.$on("uploader_fail", func);}
+    };
+});
+
 microKernelModule.factory('$backdoor', function() {
    
    	var logLines = [];
@@ -946,14 +1063,68 @@ microKernelModule.factory('$backdoor', function() {
     };
 });
 
+
+microKernelModule.factory('$apps', function($compile, $rootScope){
+
+
+
+	return{
+		onRendered: function(func){},
+		onAppClosed: function(func){},
+
+		executeMVC: function(sc, renderElement, appCode, view, model){
+
+            var engineHtml = "<duoapp app-code='"+ appCode + "'></duoapp>";
+            var content = $compile(engineHtml)(sc);
+            $("#" + renderElement).append(content);
+
+            $rootScope.$emit("apps_loaded_" + appCode, {view:view,controller:{model:model}});
+          
+        },
+		setLayout: function(layout){
+
+		},
+		ipc: function(destId,data){
+
+		}
+	}
+});
+
 microKernelModule.factory('$v6urls', function() {
    
 	var urls={
 		auth:"http://192.168.2.40:3048",
 		objectStore:"http://192.168.2.42:3000",
-		fws:"http://192.168.2.42:4000"
+		fws:"http://localhost:4000"
 	};
 
     return urls;
 });
 
+
+
+microKernelModule.directive("duoapp", ["$rootScope","$compile","$presence", "$chat", "$webrtc", "$auth", "$backdoor", "$objectstore", "$agent", "$srs", "$uploader", function($rootScope,$compile,$presence, $chat, $webrtc, $auth, $backdoor, $objectstore, $agent, $srs, $uploader) {
+  return {
+    restrict: "E",
+
+    template: "",
+
+    transclude: true,
+    scope: {
+      appCode: "@"
+    },
+    link: function(scope,element){
+    	scope.state = "loading";
+
+    	$rootScope.$on("apps_loaded_" + scope.appCode,function(event,data){
+    		scope.state = "loaded";
+
+          for(var propt in data.controller)
+            scope[propt] = data.controller[propt];
+
+      	var content = $compile(data.view)(scope);
+      	element.append(content);
+    	});
+    }
+  };
+}]);

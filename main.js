@@ -1,6 +1,6 @@
 var mainModule = angular.module("mainApp", ["uiMicrokernel"]);
 
-mainModule.controller("mainController", function ($scope, $presence, $chat, $webrtc, $auth, $backdoor, $objectstore, $agent) {
+mainModule.controller("mainController", function ($scope, $presence, $chat, $webrtc, $auth, $backdoor, $objectstore, $agent, $srs, $uploader, $apps) {
 
 ////////////////////////////////////////////////////////////////////////////////////
 //////////////////////////////////// OBJECT STORE //////////////////////////////////
@@ -187,11 +187,11 @@ mainModule.controller("mainController", function ($scope, $presence, $chat, $web
 	$scope.allmatrics = [];
 
 	$scope.on = function(){
-		$agent.on("ObjectStore@SUPUN1-LAP.duosl.duosoftware.com");
+		$agent.on($scope.toUser);
 	}
 
 	$scope.off = function(){
-		$agent.off("ObjectStore@SUPUN1-LAP.duosl.duosoftware.com");
+		$agent.off($scope.toUser);
 	}
 
 	$scope.getTenantInfo = function(){
@@ -203,21 +203,92 @@ mainModule.controller("mainController", function ($scope, $presence, $chat, $web
 	}
 
 
-	$agent.onTenantInfo(function (e, data){
+	$agent.onClusterInfo(function (e, data){
 		$scope.tenantInfo = data;
 	});
 
-	$agent.onAgentInfo(function (e, data){
+	$agent.onDisplayInfo(function (e, data){
 		$scope.agentInfo = data;
 	});
 
-	$agent.onInfo(function (e, data){
-		//$scope.allmatrics.push(data)
-	})
 
-	$agent.onLogInfo(function (e, data){
+	$agent.onAgentLogInfo(function (e, data){
 		$scope.allmatrics.push(data.data.Output)
-	})
+	});
+
+	$agent.onAgentStatInfo(function (e, data){
+		$scope.allmatrics.push(data.data)
+	});
+
+
+///////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////     SRS     //////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////
+
+
+	$scope.acquiredResource = "N/A";
+	$scope.srsState = $srs.getState().state;
+
+	$scope.getResource = function(){
+		$srs.getResource();
+	}
 
 	
+
+	$scope.releaseResource = function(){
+		$srs.releaseResource($scope.acquiredResource.name);
+	}
+
+	$srs.onResourceAcquired(function(e,data){
+		$scope.acquiredResource = data;
+	});
+
+	$srs.onResourceReleased(function(e,data){
+		$scope.acquiredResource = "N/A";
+	});
+	
+	$srs.onStateChanged(function(e,data){
+		$scope.srsState = data.state;
+	});
+
+///////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////   UPLOADER  //////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////
+
+	$scope.myFile = null;
+	$scope.fileStatus = "no file selected for upload";
+
+	$scope.uploadFile = function(){
+		$uploader.upload("com.duosoftware.com", "testupload", $scope.myFile);
+		$uploader.onSuccess(function(e,data){
+
+		});
+
+		$uploader.onError(function(e,data){
+
+		});
+	}
+
+///////////////	///////////////////////////////////////////////////////////////////////
+////////////////////////////////////   App Manager  //////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////////
+
+	$scope.openHardcodedApp = function(){
+        var appCode = "APP_TEST";
+        var renderElement = "idRenderDiv";
+
+		var heditor = ace.edit("htmleditor");
+		var jeditor = ace.edit("jseditor");
+
+		$("#" + renderElement).empty();
+
+		var model;
+        var view =  heditor.getSession().getValue() ;
+        eval("model = " + jeditor.getSession().getValue() + "()");
+
+        $apps.executeMVC($scope, renderElement, appCode, view, model);
+
+        $("#" + renderElement).dialog({width: "400"});
+	};
+
 });

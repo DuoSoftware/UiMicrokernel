@@ -8,6 +8,7 @@
 	<script src="jquery-ui.js"></script>
 	<script src="angular.min.js"></script>
 	<script src="socket.io-1.2.0.js"></script>
+	<script src="ace/ace.js" type="text/javascript" charset="utf-8"></script>
 	<script src="uimicrokernel.js"></script>
 	<script src="main.js"></script>
 	
@@ -18,12 +19,67 @@
 		.chatUserStyle .ui-selected { background: #F39814; color: white; }
 		.chatUserStyle { list-style-type: none; margin: 0; padding: 0; width: 200px; }
 		.chatUserStyle li { margin: 3px; padding: 0.4em; font-size: 1.4em; height: 18px; }
+		body{
+			font-size: 10px;	
+		}
 	</style>
+
+<style type="text/css">
+    #jseditor { 
+        position: relative;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height:500px;
+        width:98%;
+    }
+
+    #htmleditor { 
+        position: relative;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        height:500px;
+        width:98%;
+    }
+</style>
 
 	<script>
 		$(function() {
 			$("#tabs").tabs();
 			$("#dialog").dialog({width: "400"});
+
+		    var jseditor = ace.edit("jseditor");
+		    jseditor.setTheme("ace/theme/chrome");
+		    
+		    var jsValue = "\
+function main(){\n\
+	return {\n\
+	    name:'Supun Dissanayake',\n\
+	    address:'1234',\n\
+	    webcam: function(){\n\
+	        $webrtc.startLocalStream();\n\
+	    }\n\
+	}\n\
+}";
+
+		    jseditor.setValue(jsValue);
+		    
+		    jseditor.getSession().setMode("ace/mode/javascript");
+
+		    var htmleditor = ace.edit("htmleditor");
+		    htmleditor.setTheme("ace/theme/chrome");
+		    var htmlValue = "\
+<p>\n\
+	Name: {{model.name}}<br/>\n\
+	Addres : {{model.address}}\n\
+</p>\n\
+<br/>Address : <input type='text' ng-model='model.address'/>\n\
+<input type='button' ng-click='model.webcam()' value='Open Webcam'/>\n\
+";
+
+		    htmleditor.setValue(htmlValue);
+		    htmleditor.getSession().setMode("ace/mode/html");
 
 		});
 	</script>
@@ -53,14 +109,22 @@
 			<li><a href="#tabs-1">Chat</a></li>
 			<li><a href="#tabs-2">WebRTC</a></li>
 			<li><a href="#tabs-3">Object Store</a></li>
-			<li><a href="#tabs-4">Remote Monitoring</a></li>
+			<li><a href="#tabs-4">Monitor</a></li>
+			<li><a href="#tabs-5">Uploader</a></li>
+			<li><a href="#tabs-6">Scheduler</a></li>
+			<li><a href="#tabs-7">Dispatcher</a></li>
+			<li><a href="#tabs-8">Social Media</a></li>
+			<li><a href="#tabs-9">SRDS</a></li>
+			<li><a href="#tabs-10">App Manager</a></li>
 			<li><a href="#tabs-last">Backdoor</a></li>
 		</ul>	
 		<div id="tabs-1">
 			<h3>Selected User : {{toUser}}</h3>
-			<ol id="chatUsers" class="chatUserStyle">
-				<li class="ui-widget-content" ng-repeat="u in allUsers"><div width="100%"><input type="button" value="{{u.userName}}" ng-click="selectUser(u)"/></div></li>
-			</ol>
+
+			<!--ol id="chatUsers" class="chatUserStyle">
+				<li class="ui-widget-content" ng-repeat="u in allUsers"><div width="100%"><input type="button" 		value="{{u.userName}}" ng-click="selectUser(u)"/></div></li>
+			</ol-->
+			<input type="button" ng-repeat="u in allUsers" value="User : {{u.userName}}" ng-click="selectUser(u)"/>
 
 			<p>Message: </p> <input type="text" ng-model="currentMessage"/> <input type="button" value="Send" ng-click="sendMessage()"/>
 			<p ng-repeat="msg in messages">{{msg}}</p>
@@ -81,11 +145,16 @@
 			</tr>
 			<tr>
 				<td colspan="2">
-				<ol id="webRtcUsers" class="chatUserStyle">
+				<!--ol id="webRtcUsers" class="chatUserStyle">
 					<li class="ui-widget-content" ng-repeat="u in allUsers"><div width="100%" ng-click="selectUser(u)">{{u.userName}}</div></li>
-				</ol>
-				</td>
+				</ol-->
 				<!--input type="text" ng-model="toUser"/><input type="button" ng-click="call()" value="Call"/-->
+			</tr>
+			<tr>
+				<td colspan="2">
+					<h3>Selected User : {{toUser}}</h3>
+					<input type="button" ng-repeat="u in allUsers" value="User : {{u.userName}}" ng-click="selectUser(u)"/>
+				</td>
 			</tr>
 			<tr>
 				<td><video id="idLocalStream" autoplay=""></video></td>
@@ -105,6 +174,12 @@
 		<div id="tabs-4">
 			<table>
 				<tr>
+					<td colspan="2">
+						<h3>Selected User : {{toUser}}</h3>
+						<input type="button" ng-repeat="u in allUsers" value="User : {{u.userName}}" ng-click="selectUser(u)"/>
+					</td>
+				</tr>
+				<tr>
 					<td>
 						<td><input type="button" ng-click="on()" value="On"/></td>
 						<td><input type="button" ng-click="off()" value="Off"/></td>
@@ -120,6 +195,51 @@
 			</table>
 
 			<p ng-repeat="n in allmatrics">{{n}}<br/></p>
+		</div>
+
+		<div id="tabs-5">
+			Browse : <input type="file" file-model="myFile"/>
+			<input type="button" ng-click="uploadFile()" value="Upload"/>
+		</div>
+
+		<div id="tabs-6">
+			
+		</div>
+
+		<div id="tabs-7">
+			
+		</div>
+
+		<div id="tabs-8">
+			
+		</div>
+
+		<div id="tabs-9">
+			<p>State : {{srsState}}</p>
+			<p>SRS Response : {{acquiredResource}}</p>
+			<input type="button" ng-click="getResource()" value = "Get Resource"/>
+			<input type="button" ng-click="releaseResource()" value = "Release Resource"/>
+		</div>
+
+		<div id="tabs-10" style="height:600px">
+			<input type="button" ng-click="openHardcodedApp()" value = "Open App"/>
+
+			<div id="idRenderDiv"></div>
+
+			<table width="100%" cellpadding="0" cellspacing="2">
+				<tr>
+					<td width="50%">HTML Code</td>
+					<td width="50%">JS Code</td>
+				</tr>
+				<tr>
+					<td>
+						<div id="htmleditor"></div>
+					</td>
+					<td>
+						<div id="jseditor"></div>
+					</td>
+				</tr>
+			</table>
 		</div>
 
 		<div id="tabs-last">
