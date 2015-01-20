@@ -1,0 +1,25 @@
+<table>
+			<h3>Selected User : {{toUser}}</h3>
+			<tr><td><p>WebRTC State : {{displayState}}</p></td></tr>
+
+			<tr>
+				<td colspan="2">
+					<input type="button" ng-click="model.startStream()" value="Start Webcam"/>
+					<input type="button" ng-click="model.answer()" value="Answer"/>
+					<input type="button" ng-click="model.reject()" value="Reject"/>
+					<input type="button" ng-click="model.call()" value="Call"/>
+					<input type="button" ng-click="model.getAll()" value="All Users"/>
+				</td>
+			</tr>
+			<tr>
+				<td colspan="2">
+					<h3>Selected User : {{model.toUser}}</h3>
+					<input type="button" ng-repeat="u in allUsers" value="User : {{u.userName}}" ng-click="model.selectUser(u)"/>
+				</td>
+			</tr>
+			<tr>
+				<td><video id="idNewLocalStream" autoplay=""></video></td>
+				<td><video id="idNewRemoteStream" autoplay=""></video></td>
+			</tr>
+
+	</table>

@@ -1,0 +1,28 @@
+<table>
+	<tr>
+		<td colspan="2">
+			<input type="button" value = "initialize" ng-click="setOnline()"/><br/>
+		</td>
+	</tr>
+	<tr>
+		<td colspan="2">
+			<h3>Selected User : {{toUser}}</h3>
+			<input type="button" ng-repeat="u in allUsers" value="User : {{u.userName}}" ng-click="selectUser(u)"/>
+		</td>
+	</tr>
+	<tr>
+		<td>
+			<td><input type="button" ng-click="on()" value="On"/></td>
+			<td><input type="button" ng-click="off()" value="Off"/></td>
+		</td>
+	</tr>
+	<tr>
+		<td>
+			<td><input type="button" ng-click="getTenantInfo()" value="Get Tenant Info"/></td>
+			<td><input type="button" ng-click="getAgentInfo()" value="Get Agent Info"/></td>
+		</td>
+	</tr>
+
+</table>
+
+<p ng-repeat="n in allmatrics">{{n}}<br/></p>

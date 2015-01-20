@@ -106,123 +106,12 @@ function main(){\n\
 
 	<div id="tabs">
 		<ul>
-			<li><a href="#tabs-1">Chat</a></li>
-			<li><a href="#tabs-2">WebRTC</a></li>
-			<li><a href="#tabs-3">Object Store</a></li>
-			<li><a href="#tabs-4">Monitor</a></li>
-			<li><a href="#tabs-5">Uploader</a></li>
-			<li><a href="#tabs-6">Scheduler</a></li>
-			<li><a href="#tabs-7">Dispatcher</a></li>
-			<li><a href="#tabs-8">Social Media</a></li>
-			<li><a href="#tabs-9">SRDS</a></li>
-			<li><a href="#tabs-10">App Manager</a></li>
-			<li><a href="#tabs-last">Backdoor</a></li>
+			<li><a href="#tabs-10">V6 Development Studio</a></li>
+			<li><a href="#tabs-last">Logs</a></li>
 		</ul>	
-		<div id="tabs-1">
-			<h3>Selected User : {{toUser}}</h3>
-
-			<!--ol id="chatUsers" class="chatUserStyle">
-				<li class="ui-widget-content" ng-repeat="u in allUsers"><div width="100%"><input type="button" 		value="{{u.userName}}" ng-click="selectUser(u)"/></div></li>
-			</ol-->
-			<input type="button" ng-repeat="u in allUsers" value="User : {{u.userName}}" ng-click="selectUser(u)"/>
-
-			<p>Message: </p> <input type="text" ng-model="currentMessage"/> <input type="button" value="Send" ng-click="sendMessage()"/>
-			<p ng-repeat="msg in messages">{{msg}}</p>
-		</div>
-
-		<div id="tabs-2">
-		<table>
-			<h3>Selected User : {{toUser}}</h3>
-			<tr><td><p>WebRTC State : {{displayState}}</p></td></tr>
-
-			<tr>
-				<td colspan="2">
-					<input type="button" ng-click="startStream()" value="Start Webcam"/>
-					<input type="button" ng-click="answer()" value="Answer"/>
-					<input type="button" ng-click="reject()" value="Reject"/>
-					<input type="button" ng-click="call()" value="Call"/>
-				</td>
-			</tr>
-			<tr>
-				<td colspan="2">
-				<!--ol id="webRtcUsers" class="chatUserStyle">
-					<li class="ui-widget-content" ng-repeat="u in allUsers"><div width="100%" ng-click="selectUser(u)">{{u.userName}}</div></li>
-				</ol-->
-				<!--input type="text" ng-model="toUser"/><input type="button" ng-click="call()" value="Call"/-->
-			</tr>
-			<tr>
-				<td colspan="2">
-					<h3>Selected User : {{toUser}}</h3>
-					<input type="button" ng-repeat="u in allUsers" value="User : {{u.userName}}" ng-click="selectUser(u)"/>
-				</td>
-			</tr>
-			<tr>
-				<td><video id="idLocalStream" autoplay=""></video></td>
-				<td><video id="idRemoteStream" autoplay=""></video></td>
-			</tr>
-
-	</table>
-		</div>
-
-		<div id="tabs-3">
-			<input type="button" value="Save New" ng-click="objectStoreSave()"/>
-			<input type="button" value="Load All" ng-click="objectStoreLoad()"/>
-
-			<p ng-repeat="n in osNames">{{n}}<br/></p>
-		</div>
-
-		<div id="tabs-4">
-			<table>
-				<tr>
-					<td colspan="2">
-						<h3>Selected User : {{toUser}}</h3>
-						<input type="button" ng-repeat="u in allUsers" value="User : {{u.userName}}" ng-click="selectUser(u)"/>
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<td><input type="button" ng-click="on()" value="On"/></td>
-						<td><input type="button" ng-click="off()" value="Off"/></td>
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<td><input type="button" ng-click="getTenantInfo()" value="Get Tenant Info"/></td>
-						<td><input type="button" ng-click="getAgentInfo()" value="Get Agent Info"/></td>
-					</td>
-				</tr>
-
-			</table>
-
-			<p ng-repeat="n in allmatrics">{{n}}<br/></p>
-		</div>
-
-		<div id="tabs-5">
-			Browse : <input type="file" file-model="myFile"/>
-			<input type="button" ng-click="uploadFile()" value="Upload"/>
-		</div>
-
-		<div id="tabs-6">
-			
-		</div>
-
-		<div id="tabs-7">
-			
-		</div>
-
-		<div id="tabs-8">
-			
-		</div>
-
-		<div id="tabs-9">
-			<p>State : {{srsState}}</p>
-			<p>SRS Response : {{acquiredResource}}</p>
-			<input type="button" ng-click="getResource()" value = "Get Resource"/>
-			<input type="button" ng-click="releaseResource()" value = "Release Resource"/>
-		</div>
 
 		<div id="tabs-10" style="height:600px">
-			<input type="button" ng-click="openHardcodedApp()" value = "Open App"/>
+			<input type="button" ng-click="openHardcodedApp()" value = "Run"/>
 
 			<div id="idRenderDiv"></div>
 
